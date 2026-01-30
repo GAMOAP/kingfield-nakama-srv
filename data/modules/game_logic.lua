@@ -45,7 +45,7 @@ function M.load_cards_library(admin_user_id)
         return nil, "Bibliothèque de cartes non trouvée"
     end
     
-    local cards_data = nk.json_decode(cards_library[1].value)
+    local cards_data = cards_library[1].value
     
     if not cards_data or not cards_data.data then
         print("[GAME_LOGIC] ⚠️ Format de bibliothèque invalide")
@@ -94,7 +94,7 @@ function M.load_team(state, player_index, user_id, admin_user_id)
         return false, "Équipe non trouvée dans le storage"
     end
     
-    local user_team_data = nk.json_decode(user_team[1].value)
+    local user_team_data = user_team[1].value
     
     if not user_team_data or not user_team_data.data then
         print("[GAME_LOGIC] ⚠️ Format d'équipe invalide")
@@ -193,7 +193,7 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
         
         -- Stats (calculées plus tard)
         attributes = {
-            Karma = 0,
+            karma = 0,
             crystal_blue = 0,
             crystal_red = 0,
             crystals = 0,
@@ -222,7 +222,6 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
             
             if card_data then
                 char.cards[card_type] = card_data
-                print(string.format("[GAME_LOGIC]     Carte %s (%s): %s", card_type, card_id, card_data.name or "sans nom"))
             else
                 print(string.format("[GAME_LOGIC]     ⚠️ Carte inconnue: %s", card_id))
             end
@@ -231,7 +230,17 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
     
     -- Calculer les stats
     char.attributes = M.calculate_unit_stats(char)
+
+    -- Afficher les stats
+    --for k, v in pairs(char.attributes) do
+        --print(string.format("[GAME_LOGIC] %s = %d", k, v))
+    --end
+
+    -- Calculer du karma
+    char.attributes.karma = M.calculate_unit_karma(char_cards)
+    print(string.format("[GAME_LOGIC] char.karma = %d", char.attributes.karma))
     
+
     return char
 end
 
@@ -241,26 +250,22 @@ end
 
 function M.calculate_unit_stats(char)
     local attributes = {
-        Karma = 0,
+        karma = 0,
         crystal_blue = 0,
         crystal_red = 0,
         crystals = 0,
-            
         heart = 0,
         life = 0,
-            
         defense = 0,
         attack = 0,
         xp = 0,
         level = 0
     }
-    
-    
+
     for _, card_type in ipairs(CARD_TYPE) do
         local card = char.cards[card_type]
-        
-        if card.data then
 
+        if card and card.data then
             local effects = {
                 [1] = "crystal_blue",
                 [2] = "crystal_red",
@@ -271,60 +276,80 @@ function M.calculate_unit_stats(char)
 
             for i = 1, 3 do
                 local value = card.data["slot" .. i]
+
                 if value then
                     local effect = math.floor(value)
                     local attr = effects[effect]
+
                     if attr then
                         attributes[attr] = attributes[attr] + 1
+                    else
+                        print(string.format("[GAME_LOGIC] Aucun effet correspondant pour %d", effect))
                     end
                 end
             end
+        else
+            print(string.format("[GAME_LOGIC] Pas de données pour la carte %s", card_type))
         end
     end
-    
+
     attributes.crystals = attributes.crystal_blue + attributes.crystal_red
-    
     attributes.life = attributes.heart
-    
-    
+
+    return attributes -- Ajout du retour des attributs calculés
 end
+
 
 -- ============================================
 -- CALCUL DU KARMA
 -- ============================================
 
-function M.get_karma(_char_data)
-    local sign_count = {}
-    local min_hundreds = {}
+function M.calculate_unit_karma(char_cards)
+    -- Tables pour stocker les comptages et valeurs minimales
+    local sign_count = {}    -- Compte les occurrences de chaque dizaine
+    local min_hundreds = {}  -- Stocke le chiffre des centaines minimal pour chaque dizaine
 
-    -- Parcours de toutes les valeurs
-    for _, str_value in pairs(_char_data) do
+    print("[GAME_LOGIC] === Calcul du karma ===")
+
+    -- Parcours de toutes les valeurs du personnage
+    for _, str_value in pairs(char_cards) do
+        -- Conversion en nombre (0 si conversion échoue)
         local value = tonumber(str_value) or 0
-        local hundreds = math.floor(value / 100)
-        local tens = math.floor((value % 100) / 10)
 
-        -- Compte des dizaines
+        -- Extraction des chiffres des centaines et dizaines
+        local hundreds = math.floor(value / 100)  -- Chiffre des centaines
+        local tens = math.floor((value % 100) / 10)  -- Chiffre des dizaines
+
+        -- Comptage des occurrences de cette dizaine
         sign_count[tens] = (sign_count[tens] or 0) + 1
 
-        -- Garde le plus petit chiffre des centaines pour cette dizaine
-        if min_hundreds[tens] == nil or hundreds < min_hundreds[tens] then
+        -- Mise à jour du chiffre des centaines minimal pour cette dizaine
+        if not min_hundreds[tens] or hundreds < min_hundreds[tens] then
             min_hundreds[tens] = hundreds
         end
     end
 
-    -- Détermine la "dizaine gagnante" (karma)
+    -- Détermination de la dizaine dominante (karma)
     local karma = nil
     local max_count = 0
+
     for tens, count in pairs(sign_count) do
         local hundreds = min_hundreds[tens]
-        if count > max_count or (count == max_count and (karma == nil or hundreds < min_hundreds[karma])) then
+
+        -- Critères de sélection :
+        -- 1. La dizaine avec le plus d'occurrences
+        -- 2. En cas d'égalité, celle avec le chiffre des centaines le plus petit
+        if count > max_count or
+           (count == max_count and (not karma or hundreds < min_hundreds[karma])) then
             max_count = count
             karma = tens
         end
     end
 
-    return karma
+    return karma or 0  -- Retourne 0 si aucun karma trouvé (au lieu de nil)
 end
+
+
 
 
 -- ============================================

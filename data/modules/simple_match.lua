@@ -3,7 +3,7 @@ local game_logic = require("game_logic")
 local M = {}
 
 -- ID de l'admin (à configurer selon votre setup)
-local ADMIN_USER_ID = "3c1485bf-c58c-4f11-b602-1df56fff3076"  -- ⚠️ REMPLACER PAR VOTRE ADMIN ID
+local ADMIN_USER_ID = "319f9d0f-06fc-4805-a900-be0d22a09b21"  -- ⚠️ REMPLACER PAR VOTRE ADMIN ID
 
 -- ============================================
 -- INITIALISATION DU MATCH
