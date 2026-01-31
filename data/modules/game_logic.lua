@@ -13,7 +13,7 @@ local CARD_TYPE = {"0", "1", "2", "3", "4", "5", "6", "7", "8"}
 -- ============================================
 
 function M.init_game_state()
-    print("[GAME_LOGIC] Initialisation de l'état du jeu")
+    print("[GAME_LOGIC] Init game state")
     
     return {
         units = {{}, {}},
@@ -27,8 +27,6 @@ end
 -- ============================================
 
 function M.load_cards_library(admin_user_id)
-    print("[GAME_LOGIC] Chargement de la bibliothèque de cartes")
-    
     -- Lire depuis le storage
     local library_Ids = {
         {
@@ -52,7 +50,7 @@ function M.load_cards_library(admin_user_id)
         return nil, "Format de bibliothèque invalide"
     end
     
-    print("[GAME_LOGIC] ✅ Bibliothèque de cartes chargée")
+    print("[GAME_LOGIC] Library loaded")
     return cards_data.data, nil
 end
 
@@ -61,7 +59,6 @@ end
 -- ============================================
 
 function M.load_team(state, player_index, user_id, admin_user_id)
-    print(string.format("[GAME_LOGIC] Chargement de l'équipe du joueur %d (user_id: %s)", player_index, user_id))
     
     -- Vérifier si l'équipe n'est pas déjà chargée
     if state.game_data.teams_loaded[player_index] then
@@ -101,10 +98,8 @@ function M.load_team(state, player_index, user_id, admin_user_id)
         return false, "Format d'équipe invalide"
     end
     
-    print("[GAME_LOGIC] 📦 Données d'équipe récupérées")
-    
     -- Créer les unités
-    local success, err = M.create_char_from_team_data(state, player_index, user_team_data.data)
+    local success, err = M.create_units_from_team_data(state, player_index, user_team_data.data)
     
     if not success then
         return false, err
@@ -113,8 +108,6 @@ function M.load_team(state, player_index, user_id, admin_user_id)
     -- Marquer l'équipe comme chargée
     state.game_data.teams_loaded[player_index] = true
     
-    print(string.format("[GAME_LOGIC] ✅ Équipe du joueur %d chargée avec succès", player_index))
-    
     return true, nil
 end
 
@@ -122,47 +115,42 @@ end
 -- CRÉATION DES UNITÉS
 -- ============================================
 
-function M.create_char_from_team_data(state, player_index, team_data)
-    print(string.format("[GAME_LOGIC] Création des unités pour le joueur %d", player_index))
+function M.create_units_from_team_data(state, player_index, team_data)
     
     -- Position Y de départ selon le joueur
-    local start_y = (player_index == 1) and 0 or 4
+    local start_y = (player_index == 1) and 1 or 5
     
     local team = {}
     
     -- Parcourir chaque character (side_left, center_left, king, etc.)
-    for i, char_name in ipairs(TEAM) do
-        local char_cards = team_data[char_name]
+    for i, unit_name in ipairs(TEAM) do
+        local unit_cards = team_data[unit_name]
         
-        if not char_cards then
-            print(string.format("[GAME_LOGIC] ⚠️ Position manquante: %s", char_name))
-            return false, string.format("Position manquante: %s", char_name)
+        if not unit_cards then
+            print(string.format("[GAME_LOGIC] ⚠️ Position manquante: %s", unit_name))
+            return false, string.format("Position manquante: %s", unit_name)
         end
         
         -- Vérifier que toutes les cartes sont présentes (0-8)
         for _, card in ipairs(CARD_TYPE) do
-            if not char_cards[card] then
-                print(string.format("[GAME_LOGIC] ⚠️ Carte manquante: %s slot %s", char_name, card))
-                return false, string.format("Carte manquante: %s slot %s", char_name, card)
+            if not unit_cards[card] then
+                print(string.format("[GAME_LOGIC] ⚠️ Carte manquante: %s slot %s", unit_name, card))
+                return false, string.format("Carte manquante: %s slot %s", unit_name, card)
             end
         end
         
         -- Créer l'unité
-        local char = M.create_char(i, start_y, char_name, char_cards, state.game_data.cards_library)
+        local unit = M.create_unit(i, start_y, unit_cards, state.game_data.cards_library)
         
-        if not char then
-            return false, string.format("Erreur création unité: %s", char_name)
+        if not unit then
+            return false, string.format("Erreur création unité: %s", unit_name)
         end
         
-        team[char_name] = char
-        
-        print(string.format("[GAME_LOGIC]   ✓ Unité créée: %s à (%d, %d)", char_name, i, start_y))
+        team[unit_name] = unit
     end
     
     -- Enregistrer les unités
     state.game_data.units[player_index] = team
-    
-    print(string.format("[GAME_LOGIC] ✅ %d unités créées", #TEAM))
     
     return true, nil
 end
@@ -171,11 +159,10 @@ end
 -- CRÉER UNE UNITÉ
 -- ============================================
 
-function M.create_char(x, y, char_name, char_cards, cards_library)
-    local char = {
+function M.create_unit(x, y, unit_cards, cards_library)
+    local unit = {
         x = x,
         y = y,
-        position_name = char_name,
         alive = true,
         
         -- Cartes de l'unité (par type)
@@ -192,7 +179,7 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
         },
         
         -- Stats (calculées plus tard)
-        attributes = {
+        stats = {
             karma = 0,
             crystal_blue = 0,
             crystal_red = 0,
@@ -209,19 +196,18 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
         
         -- État
         effects = {},
-        blocked = false,
-        sleeping = 0
+        blocked = false
     }
     
     -- Charger chaque carte depuis la bibliothèque
-    for card_type, card_id in pairs(char_cards) do
+    for card_type, card_id in pairs(unit_cards) do
         
         if card_id then
             -- Récupérer la carte depuis la bibliothèque
             local card_data = cards_library[card_id]
             
             if card_data then
-                char.cards[card_type] = card_data
+                unit.cards[card_type] = card_data
             else
                 print(string.format("[GAME_LOGIC]     ⚠️ Carte inconnue: %s", card_id))
             end
@@ -229,27 +215,21 @@ function M.create_char(x, y, char_name, char_cards, cards_library)
     end
     
     -- Calculer les stats
-    char.attributes = M.calculate_unit_stats(char)
-
-    -- Afficher les stats
-    --for k, v in pairs(char.attributes) do
-        --print(string.format("[GAME_LOGIC] %s = %d", k, v))
-    --end
+    unit.stats = M.calculate_unit_stats(unit)
 
     -- Calculer du karma
-    char.attributes.karma = M.calculate_unit_karma(char_cards)
-    print(string.format("[GAME_LOGIC] char.karma = %d", char.attributes.karma))
+    unit.stats.karma = M.calculate_unit_karma(unit_cards)
     
 
-    return char
+    return unit
 end
 
 -- ============================================
 -- CALCUL DES ATTRIBUTS
 -- ============================================
 
-function M.calculate_unit_stats(char)
-    local attributes = {
+function M.calculate_unit_stats(unit)
+    local stats = {
         karma = 0,
         crystal_blue = 0,
         crystal_red = 0,
@@ -263,7 +243,7 @@ function M.calculate_unit_stats(char)
     }
 
     for _, card_type in ipairs(CARD_TYPE) do
-        local card = char.cards[card_type]
+        local card = unit.cards[card_type]
 
         if card and card.data then
             local effects = {
@@ -282,7 +262,7 @@ function M.calculate_unit_stats(char)
                     local attr = effects[effect]
 
                     if attr then
-                        attributes[attr] = attributes[attr] + 1
+                        stats[attr] = stats[attr] + 1
                     else
                         print(string.format("[GAME_LOGIC] Aucun effet correspondant pour %d", effect))
                     end
@@ -293,10 +273,10 @@ function M.calculate_unit_stats(char)
         end
     end
 
-    attributes.crystals = attributes.crystal_blue + attributes.crystal_red
-    attributes.life = attributes.heart
+    stats.crystals = stats.crystal_blue + stats.crystal_red
+    stats.life = stats.heart
 
-    return attributes -- Ajout du retour des attributs calculés
+    return stats -- Ajout du retour des attributs calculés
 end
 
 
@@ -304,15 +284,13 @@ end
 -- CALCUL DU KARMA
 -- ============================================
 
-function M.calculate_unit_karma(char_cards)
+function M.calculate_unit_karma(unit_cards)
     -- Tables pour stocker les comptages et valeurs minimales
     local sign_count = {}    -- Compte les occurrences de chaque dizaine
     local min_hundreds = {}  -- Stocke le chiffre des centaines minimal pour chaque dizaine
 
-    print("[GAME_LOGIC] === Calcul du karma ===")
-
     -- Parcours de toutes les valeurs du personnage
-    for _, str_value in pairs(char_cards) do
+    for _, str_value in pairs(unit_cards) do
         -- Conversion en nombre (0 si conversion échoue)
         local value = tonumber(str_value) or 0
 
@@ -358,7 +336,7 @@ end
 
 function M.are_teams_ready(state)
     local ready = state.game_data.teams_loaded[1] and state.game_data.teams_loaded[2]
-    print("[GAME_LOGIC] Équipes prêtes: " .. tostring(ready))
+    print("[GAME_LOGIC] Teams ready: " .. tostring(ready))
     return ready
 end
 
@@ -367,55 +345,35 @@ end
 -- ============================================
 
 function M.get_board_state(state)
-    print("[GAME_LOGIC] Récupération de l'état du plateau")
-    
     local board = {
         units = {
             player1 = {},
             player2 = {}
         }
     }
-    
-    for unit_name, unit in pairs(state.game_data.units[1]) do
-        board.units.player1[unit_name] = {
-            x = unit.x,
-            y = unit.y,
-            position_name = unit.position_name,
-            alive = unit.alive,
-            stats = unit.stats,
-            cards = {
-                breed = unit.cards.breed and unit.cards.breed.name or nil,
-                job = unit.cards.job and unit.cards.job.name or nil,
-                helmet = unit.cards.helmet and unit.cards.helmet.name or nil,
-                item = unit.cards.item and unit.cards.item.name or nil,
-                armor = unit.cards.armor and unit.cards.armor.name or nil,
-                move = unit.cards.move and unit.cards.move.name or nil,
-                spell = unit.cards.spell and unit.cards.spell.name or nil,
-                weapon = unit.cards.weapon and unit.cards.weapon.name or nil,
-                object = unit.cards.object and unit.cards.object.name or nil
-            }
-        }
-    end
-    
-    for unit_name, unit in pairs(state.game_data.units[2]) do
-        board.units.player2[unit_name] = {
-            x = unit.x,
-            y = unit.y,
-            position_name = unit.position_name,
-            alive = unit.alive,
-            stats = unit.stats,
-            cards = {
-                breed = unit.cards.breed and unit.cards.breed.name or nil,
-                job = unit.cards.job and unit.cards.job.name or nil,
-                helmet = unit.cards.helmet and unit.cards.helmet.name or nil,
-                item = unit.cards.item and unit.cards.item.name or nil,
-                armor = unit.cards.armor and unit.cards.armor.name or nil,
-                move = unit.cards.move and unit.cards.move.name or nil,
-                spell = unit.cards.spell and unit.cards.spell.name or nil,
-                weapon = unit.cards.weapon and unit.cards.weapon.name or nil,
-                object = unit.cards.object and unit.cards.object.name or nil
-            }
-        }
+
+    -- Boucle sur les deux joueurs (1 et 2)
+    for player_num = 1, 2 do
+        -- Vérifie que les unités du joueur existent dans game_data
+        if state.game_data.units[player_num] then
+            -- Boucle sur les unités du joueur
+            for unit_name, unit in pairs(state.game_data.units[player_num]) do
+                -- Initialise la structure de l'unité
+                board.units["player"..player_num][unit_name] = {
+                    x = unit.x,
+                    y = unit.y,
+                    alive = unit.alive,
+                    stats = unit.stats,
+                    cards = {}
+                }
+
+                -- Boucle sur les cartes de l'unité
+                for card_type, card_data in pairs(unit.cards) do
+                    board.units["player"..player_num][unit_name].cards[card_type] =
+                        card_data and card_data.id or nil
+                end
+            end
+        end
     end
     
     return board

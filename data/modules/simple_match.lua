@@ -9,7 +9,6 @@ local ADMIN_USER_ID = "319f9d0f-06fc-4805-a900-be0d22a09b21"  -- ⚠️ REMPLACE
 -- INITIALISATION DU MATCH
 -- ============================================
 function M.match_init(context, params)
-    print("[MATCH] Initialisation du match")
     
     local state = {
         players = {},
@@ -19,7 +18,6 @@ function M.match_init(context, params)
         game_data = game_logic.init_game_state()
     }
     
-    print("[MATCH] État initial créé")
     return state, 1, "Turn-based game"
 end
 
@@ -27,7 +25,6 @@ end
 -- TENTATIVE DE REJOINDRE
 -- ============================================
 function M.match_join_attempt(context, dispatcher, tick, state, presence, metadata)
-    print("[MATCH] Tentative de connexion de " .. presence.username)
     
     -- Refuser si le jeu a déjà commencé
     if state.game_started then
@@ -41,7 +38,6 @@ function M.match_join_attempt(context, dispatcher, tick, state, presence, metada
         return state, false, "Match full"
     end
     
-    print("[MATCH] Connexion acceptée")
     return state, true
 end
 
@@ -50,7 +46,7 @@ end
 -- ============================================
 function M.match_join(context, dispatcher, tick, state, presences)
     for _, presence in ipairs(presences) do
-        print("[MATCH] Joueur rejoint: " .. presence.username)
+        print("[MATCH] Player join: " .. presence.username)
         
         -- Ajouter le joueur
         table.insert(state.players, {
@@ -71,7 +67,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
         }
         dispatcher.broadcast_message(1, nk.json_encode(msg))
         
-        print("[MATCH] " .. #state.players .. "/2 joueurs connectés")
+        print("[MATCH] " .. #state.players .. "/2 players connected")
     end
     
     -- Si 2 joueurs, demander le chargement des équipes
@@ -86,7 +82,6 @@ function M.match_join(context, dispatcher, tick, state, presences)
             end
 
             player.team_loaded = true
-            print("[MATCH] ✅ Équipe joueur " .. team_number .. " chargée")
 
             local team_msg = { type = "team_loaded", player = team_number, player_name = player.name }
             dispatcher.broadcast_message(1, nk.json_encode(team_msg))
@@ -102,8 +97,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
         
         -- Démarrer le jeu
         if game_logic.are_teams_ready(state) then
-            print("[MATCH] 🎮 Démarrage du jeu!")
-            
+        
             state.game_started = true
             
             local start_msg = {
@@ -115,7 +109,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
             }
             
             dispatcher.broadcast_message(1, nk.json_encode(start_msg))
-            print("[MATCH] ✅ Message game_start envoyé")
+            print("[MATCH] 🎮 Game_start message sended")
         end
     end
     
