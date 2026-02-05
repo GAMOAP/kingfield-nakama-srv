@@ -124,7 +124,7 @@ function M.create_units_from_team_data(state, player_index, team_data)
     
     -- Parcourir chaque character (side_left, center_left, king, etc.)
     for i, unit_name in ipairs(TEAM) do
-        local unit_cards = team_data[unit_name]
+        local unit_cards = team_data[unit_name]["cards"]
         
         if not unit_cards then
             print(string.format("[GAME_LOGIC] ⚠️ Position manquante: %s", unit_name))
@@ -346,20 +346,23 @@ end
 
 function M.get_board_state(state)
     local board = {
-        units = {
-            player1 = {},
-            player2 = {}
-        }
+        units = {}
     }
 
     -- Boucle sur les deux joueurs (1 et 2)
     for player_num = 1, 2 do
+        -- Récupère l'ID réel du joueur
+        local player_id = state.players[player_num].id
+
         -- Vérifie que les unités du joueur existent dans game_data
-        if state.game_data.units[player_num] then
+        if player_id and state.game_data.units[player_num] then
+            -- Initialise la table des unités pour ce joueur
+            board.units[player_id] = {}
+
             -- Boucle sur les unités du joueur
             for unit_name, unit in pairs(state.game_data.units[player_num]) do
                 -- Initialise la structure de l'unité
-                board.units["player"..player_num][unit_name] = {
+                board.units[player_id][unit_name] = {
                     x = unit.x,
                     y = unit.y,
                     alive = unit.alive,
@@ -369,7 +372,7 @@ function M.get_board_state(state)
 
                 -- Boucle sur les cartes de l'unité
                 for card_type, card_data in pairs(unit.cards) do
-                    board.units["player"..player_num][unit_name].cards[card_type] =
+                    board.units[player_id][unit_name].cards[card_type] =
                         card_data and card_data.id or nil
                 end
             end

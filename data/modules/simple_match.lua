@@ -83,8 +83,6 @@ function M.match_join(context, dispatcher, tick, state, presences)
 
             player.team_loaded = true
 
-            local team_msg = { type = "team_loaded", player = team_number, player_name = player.name }
-            dispatcher.broadcast_message(1, nk.json_encode(team_msg))
             return true
         end
 
