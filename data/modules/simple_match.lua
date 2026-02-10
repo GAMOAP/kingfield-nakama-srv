@@ -47,15 +47,15 @@ end
 function M.match_join(context, dispatcher, tick, state, presences)
     for _, presence in ipairs(presences) do
         print("[MATCH] Player join: " .. presence.username)
-        
+
         -- Ajouter le joueur
         table.insert(state.players, {
             id = presence.user_id,
             name = presence.username,
             session = presence.session_id,
-            team_loaded = false  -- Nouveau: indicateur d'équipe chargée
+            team_loaded = false
         })
-        
+
         -- Notifier tous les joueurs
         local msg = {
             type = "player_joined",
@@ -66,22 +66,50 @@ function M.match_join(context, dispatcher, tick, state, presences)
             }
         }
         dispatcher.broadcast_message(1, nk.json_encode(msg))
-        
+
         print("[MATCH] " .. #state.players .. "/2 players connected")
     end
-    
+
     -- Si 2 joueurs, demander le chargement des équipes
     if #state.players == 2 then
         local function load_team_for_player(player, team_number)
             local success, err = game_logic.load_team(state, team_number, player.id, ADMIN_USER_ID)
             if not success then
                 print("[MATCH] ⚠️ Erreur chargement équipe joueur " .. team_number .. ": " .. err)
-                local error_msg = { type = "error", message = "Erreur chargement équipe joueur " .. team_number .. ": " .. err }
+                local error_msg = {
+                    type = "error",
+                    message = "Erreur chargement équipe joueur " .. team_number .. ": " .. err
+                }
                 dispatcher.broadcast_message(1, nk.json_encode(error_msg))
                 return false
             end
 
             player.team_loaded = true
+
+            -- Vérifier si les deux équipes sont chargées
+            if game_logic.are_teams_ready(state) then
+                -- Créer la grille avec les karmas des équipes
+                state.game_data.board = game_logic.create_board(state)
+
+                -- Démarrer le jeu
+                state.game_started = true
+
+                local start_msg = {
+                    type = "game_start",
+                    current_player = state.players[state.current_player].id,
+                    current_player_name = state.players[state.current_player].name,
+                    turn = state.turn,
+                    units_state = game_logic.get_units_state(state),
+                    board_state = game_logic.get_board_state(state),  -- Ajout de l'état du board
+                    karma_value = {
+                        [1] = game_logic.calculate_team_karma(state.game_data.units[1]),
+                        [2] = game_logic.calculate_team_karma(state.game_data.units[2])
+                    }
+                }
+
+                dispatcher.broadcast_message(1, nk.json_encode(start_msg))
+                print("[MATCH] 🎮 Game_start message sended with board state")
+            end
 
             return true
         end
@@ -92,25 +120,8 @@ function M.match_join(context, dispatcher, tick, state, presences)
                 return state
             end
         end
-        
-        -- Démarrer le jeu
-        if game_logic.are_teams_ready(state) then
-        
-            state.game_started = true
-            
-            local start_msg = {
-                type = "game_start",
-                current_player = state.players[state.current_player].id,
-                current_player_name = state.players[state.current_player].name,
-                turn = state.turn,
-                board_state = game_logic.get_board_state(state)
-            }
-            
-            dispatcher.broadcast_message(1, nk.json_encode(start_msg))
-            print("[MATCH] 🎮 Game_start message sended")
-        end
     end
-    
+
     return state
 end
 
