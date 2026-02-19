@@ -1,15 +1,16 @@
+-- match_handler.lua
 local nk = require("nakama")
 local game_logic = require("game_logic")
+local match_players = require("match.players")
+--local match_turn = require("match.turn") -- À créer plus tard
 local M = {}
 
--- ID de l'admin (à configurer selon votre setup)
-local ADMIN_USER_ID = "319f9d0f-06fc-4805-a900-be0d22a09b21"  -- ⚠️ REMPLACER PAR VOTRE ADMIN ID
+local ADMIN_USER_ID = "319f9d0f-06fc-4805-a900-be0d22a09b21"
 
 -- ============================================
 -- INITIALISATION DU MATCH
 -- ============================================
 function M.match_init(context, params)
-    
     local state = {
         players = {},
         current_player = 1,
@@ -18,14 +19,13 @@ function M.match_init(context, params)
         game_data = game_logic.init_game_state()
     }
     
-    return state, 1, "Turn-based game"
+    return state, 1, "Kingfield Match"
 end
 
 -- ============================================
 -- TENTATIVE DE REJOINDRE
 -- ============================================
-function M.match_join_attempt(context, dispatcher, tick, state, presence, metadata)
-    
+function M.match_join_attempt(context, dispatcher, tick, state, presence, metadata) 
     -- Refuser si le jeu a déjà commencé
     if state.game_started then
         print("[MATCH] Refusé: Partie déjà commencée")
@@ -45,30 +45,7 @@ end
 -- JOUEUR A REJOINT
 -- ============================================
 function M.match_join(context, dispatcher, tick, state, presences)
-    for _, presence in ipairs(presences) do
-        print("[MATCH] Player join: " .. presence.username)
-
-        -- Ajouter le joueur
-        table.insert(state.players, {
-            id = presence.user_id,
-            name = presence.username,
-            session = presence.session_id,
-            team_loaded = false
-        })
-
-        -- Notifier tous les joueurs
-        local msg = {
-            type = "player_joined",
-            count = #state.players,
-            player = {
-                id = presence.user_id,
-                username = presence.username
-            }
-        }
-        dispatcher.broadcast_message(1, nk.json_encode(msg))
-
-        print("[MATCH] " .. #state.players .. "/2 players connected")
-    end
+    state = match_players.handle_join(state, dispatcher, presences) 
 
     -- Si 2 joueurs, demander le chargement des équipes
     if #state.players == 2 then
@@ -129,56 +106,25 @@ end
 -- JOUEUR A QUITTÉ
 -- ============================================
 function M.match_leave(context, dispatcher, tick, state, presences)
-    for _, presence in ipairs(presences) do
-        print("[MATCH] Joueur quitte: " .. presence.user_id)
-        
-        for i, player in ipairs(state.players) do
-            if player.session == presence.session_id then
-                table.remove(state.players, i)
-                
-                local msg = {
-                    type = "player_left",
-                    player_id = player.id,
-                    player_name = player.name
-                }
-                dispatcher.broadcast_message(1, nk.json_encode(msg))
-                
-                -- Si le jeu avait commencé, l'autre joueur gagne
-                if state.game_started and #state.players == 1 then
-                    print("[MATCH] Victoire par abandon")
-                    
-                    local winner = state.players[1]
-                    local game_over_msg = {
-                        type = "game_over",
-                        reason = "opponent_left",
-                        winner = winner.id,
-                        winner_name = winner.name
-                    }
-                    dispatcher.broadcast_message(1, nk.json_encode(game_over_msg))
-                    
-                    return nil  -- Terminer le match
-                end
-                
-                break
-            end
-        end
-    end
-    
-    -- Si plus de joueurs, terminer le match
-    if #state.players == 0 then
-        print("[MATCH] Plus de joueurs, fermeture du match")
-        return nil
-    end
-    
-    return state
+    return match_players.handle_leave(state, dispatcher, presences)
 end
 
 -- ============================================
 -- BOUCLE PRINCIPALE (vide pour l'instant)
 -- ============================================
 function M.match_loop(context, dispatcher, tick, state, messages)
-    -- Pour l'instant, on ne fait rien
-    -- On implémentera le chargement des équipes plus tard
+    for _, message in ipairs(messages) do
+        local decoded = nk.json_decode(message.data)
+        if decoded.type == "action" then
+            local success, result = match_turn.process_action(state, message.sender, decoded)
+            if success then
+                dispatcher.broadcast_message(1, nk.json_encode({
+                    type = "action_result",
+                    result = result
+                }))
+            end
+        end
+    end
     return state
 end
 

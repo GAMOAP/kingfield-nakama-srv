@@ -1,4 +1,8 @@
 local nk = require("nakama")
+local board = require("game_logic.board")
+local units = require("game_logic.units")
+local karma = require("game_logic.karma")
+local actions = require("game_logic.actions")
 local M = {}
 
 -- ============================================
@@ -7,9 +11,6 @@ local M = {}
 local GRID_SIZE = 5
 local TEAM= {"side_left", "center_left", "king", "center_right", "side_right"}
 local CARD_TYPE = {"0", "1", "2", "3", "4", "5", "6", "7", "8"}
-
-local COLUMNS = {"A", "B", "C", "D", "E"}
-local ROWS = {"1", "2", "3", "4", "5"}
 
 
 -- ============================================
@@ -31,64 +32,8 @@ end
 -- CHARGEMENT DE LA GRILLE
 -- ============================================
 function M.create_board(state)
-    local board = {}
-    local columns = {"A", "B", "C", "D", "E"}
-
-    -- Calculer les karmas des deux équipes
-    local karma_player1 = M.calculate_team_karma(state.game_data.units[1])
-    local karma_player2 = M.calculate_team_karma(state.game_data.units[2])
-
-    for x = 1, 5 do
-        for y = 1, 5 do
-             -- Calcul dynamique des quarts
-            local num_karma1 = 5 - y  -- Nombre de quarts pour player1
-            local quarters = {}
-
-            -- Remplissage initial
-            for i = 1, num_karma1 do quarters[i] = karma_player1 end
-            for i = num_karma1 + 1, 4 do quarters[i] = karma_player2 end
-
-            -- Mélange aléatoire
-            for i = 4, 2, -1 do
-                local j = math.random(i)
-                quarters[i], quarters[j] = quarters[j], quarters[i]
-            end
-
-            -- Création de la case
-            if not board[x] then board[x] = {} end
-            board[x][y] = {
-                position = {x = x, y = y},
-                chess_position = columns[x] .. y,
-                data = {
-                    quarters = quarters,
-                    is_occupied = false,
-                    occupant = nil
-                }
-            }
-        end
-    end
-
-    -- placer les unités dans la grille
-    for player_index, team in pairs(state.game_data.units) do
-        for unit_name, unit in pairs(team) do
-            local x, y = unit.x, unit.y
-
-            -- Vérifier que la case existe
-            if board[x] and board[x][y] then
-                board[x][y].data.is_occupied = true
-                board[x][y].data.occupant = {
-                    unit_id = unit_name,
-                    player = player_index
-                }
-            else
-                print(string.format("[GAME_LOGIC] ⚠️ Position invalide pour %s: (%d, %d)", unit_name, x, y))
-            end
-        end
-    end
-
-    return board
+    return board.create_board(state)
 end
-
 
 -- ============================================
 -- CHARGEMENT DE LA BIBLIOTHÈQUE DE CARTES
@@ -241,125 +186,7 @@ end
 -- CRÉER UNE UNITÉ
 -- ============================================
 function M.create_unit(x, y, unit_cards, cards_library)
-    -- Conversion des coordonnées en notation échiquéenne
-    local chess_position = COLUMNS[x] .. ROWS[y]
-
-    local unit = {
-        x = x,
-        y = y,
-        chess_position = chess_position,
-        alive = true,
-        
-        -- Cartes de l'unité (par type)
-        cards = {
-            ["0"] = nil,
-            ["1"] = nil,
-            ["2"] = nil,
-            ["3"] = nil,
-            ["4"] = nil,
-            ["5"] = nil,
-            ["6"] = nil,
-            ["7"] = nil,
-            ["8"] = nil
-        },
-        
-        -- Stats (calculées plus tard)
-        stats = {
-            karma = 0,
-            crystal_blue = 0,
-            crystal_red = 0,
-            crystals = 0,
-            
-            heart = 0,
-            life = 0,
-            
-            defense = 0,
-            attack = 0,
-            xp = 0,
-            level = 0
-        },
-        
-        -- État
-        effects = {},
-        blocked = false
-    }
-    
-    -- Charger chaque carte depuis la bibliothèque
-    for card_type, card_id in pairs(unit_cards) do
-        
-        if card_id then
-            -- Récupérer la carte depuis la bibliothèque
-            local card_data = cards_library[card_id]
-            
-            if card_data then
-                unit.cards[card_type] = card_data
-            else
-                print(string.format("[GAME_LOGIC]     ⚠️ Carte inconnue: %s", card_id))
-            end
-        end
-    end
-    
-    -- Calculer les stats
-    unit.stats = M.calculate_unit_stats(unit)
-
-    -- Calculer du karma
-    unit.stats.karma = M.calculate_unit_karma(unit_cards)
-    
-
-    return unit
-end
-
-
--- ============================================
--- CALCUL DES ATTRIBUTS
--- ============================================
-function M.calculate_unit_stats(unit)
-    local stats = {
-        karma = 0,
-        crystal_blue = 0,
-        crystal_red = 0,
-        crystals = 0,
-        heart = 0,
-        life = 0,
-        defense = 0,
-        attack = 0,
-        xp = 0,
-        level = 0
-    }
-
-    for _, card_type in ipairs(CARD_TYPE) do
-        local card = unit.cards[card_type]
-
-        if card and card.data then
-            local effects = {
-                [1] = "crystal_blue",
-                [2] = "crystal_red",
-                [3] = "heart",
-                [4] = "defense",
-                [5] = "attack"
-            }
-
-            for i = 1, 3 do
-                local value = card.data["slot" .. i]
-
-                if value then
-                    local effect = math.floor(value)
-                    local attr = effects[effect]
-
-                    if attr then
-                        stats[attr] = stats[attr] + 1
-                    end
-                end
-            end
-        else
-            print(string.format("[GAME_LOGIC] Pas de données pour la carte %s", card_type))
-        end
-    end
-
-    stats.crystals = stats.crystal_blue + stats.crystal_red
-    stats.life = stats.heart
-
-    return stats -- Ajout du retour des attributs calculés
+    return units.create_unit(x, y, unit_cards, cards_library)
 end
 
 
@@ -367,7 +194,7 @@ end
 -- CALCUL DU KARMA D'UNE UNITÉ
 -- ============================================
 function M.calculate_unit_karma(unit_cards)
-    return M.calculate_karma(unit_cards)
+    return karma.calculate_karma(unit_cards)
 end
 
 
@@ -379,61 +206,14 @@ function M.calculate_team_karma(team_units)
 
     -- Collecter toutes les cartes de toutes les unités
     for _, unit in pairs(team_units) do
-        for card_type, card_data in pairs(unit.cards) do
+        for _, card_data in pairs(unit.cards) do
             if card_data and card_data.id then
                 table.insert(all_card_ids, card_data.id)
             end
         end
     end
 
-    return M.calculate_karma(all_card_ids)
-end
-
-
--- ============================================
--- CALCUL DU KARMA (GÉNÉRIQUE)
--- ============================================
-function M.calculate_karma(card_values)
-    -- Tables pour stocker les comptages et valeurs minimales
-    local sign_count = {}    -- Compte les occurrences de chaque dizaine
-    local min_hundreds = {}  -- Stocke le chiffre des centaines minimal pour chaque dizaine
-
-    -- Parcours de toutes les valeurs fournies
-    for _, str_value in pairs(card_values) do
-        -- Conversion en nombre (0 si conversion échoue)
-        local value = tonumber(str_value) or 0
-
-        -- Extraction des chiffres des centaines et dizaines
-        local hundreds = math.floor(value / 100)  -- Chiffre des centaines
-        local tens = math.floor((value % 100) / 10)  -- Chiffre des dizaines
-
-        -- Comptage des occurrences de cette dizaine
-        sign_count[tens] = (sign_count[tens] or 0) + 1
-
-        -- Mise à jour du chiffre des centaines minimal pour cette dizaine
-        if not min_hundreds[tens] or hundreds < min_hundreds[tens] then
-            min_hundreds[tens] = hundreds
-        end
-    end
-
-    -- Détermination de la dizaine dominante (karma)
-    local karma = nil
-    local max_count = 0
-
-    for tens, count in pairs(sign_count) do
-        local hundreds = min_hundreds[tens]
-
-        -- Critères de sélection :
-        -- 1. La dizaine avec le plus d'occurrences
-        -- 2. En cas d'égalité, celle avec le chiffre des centaines le plus petit
-        if count > max_count or
-           (count == max_count and (not karma or hundreds < min_hundreds[karma])) then
-            max_count = count
-            karma = tens
-        end
-    end
-
-    return karma or 0  -- Retourne 0 si aucun karma trouvé
+    return karma.calculate_karma(all_card_ids)
 end
 
 
@@ -471,6 +251,7 @@ function M.get_units_state(state)
                 board.units[player_id][unit_name] = {
                     x = unit.x,
                     y = unit.y,
+                    chess_position = unit.chess_position,
                     alive = unit.alive,
                     stats = unit.stats,
                     cards = {}
@@ -521,6 +302,15 @@ function M.get_board_state(state)
 
     return board_state
 end
+
+-- ============================================
+-- TRAITEMENT DES ACTIONS JOUEUR
+-- ============================================
+function M.process_player_action(state, player_id, action_data)
+     return actions.process_player_action(state, player_id, action_data)
+end
+
+
 
 
 return M
