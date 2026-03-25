@@ -1,5 +1,6 @@
 -- modules/game_logic/units.lua
 local karma = require("game_logic.karma")
+local cards = require("game_logic.cards")
 local helpers = require("utils.helpers")
 
 local M = {}
@@ -8,6 +9,7 @@ local M = {}
 -- CONSTANTES
 -- ============================================
 local CARD_TYPE = {"0", "1", "2", "3", "4", "5", "6", "7", "8"}
+local TEAM = {"side_left", "center_left", "king", "center_right", "side_right"}
 
 -- ============================================
 -- CRÉER UNE UNITÉ
@@ -129,6 +131,92 @@ function M.calculate_unit_stats(unit)
     stats.life = stats.heart
 
     return stats -- Ajout du retour des attributs calculés
+end
+
+-- ============================================
+-- CRÉATION DES UNITÉS D'UNE ÉQUIPE
+-- ============================================
+function M.create_units_from_team_data(team_data, cards_library, player_index)
+    local start_y = (player_index == 1) and 1 or 5
+    local team = {}
+
+    for i, unit_name in ipairs(TEAM) do
+        local unit_cards = team_data[unit_name]["cards"]
+
+        if not unit_cards then
+            return false, string.format("Position manquante: %s", unit_name)
+        end
+
+        -- Vérifier que toutes les cartes sont présentes
+        for _, card in ipairs(CARD_TYPE) do
+            if not unit_cards[card] then
+                return false, string.format("Carte manquante: %s slot %s", unit_name, card)
+            end
+        end
+
+        local x = i
+        local unit = M.create_unit(x, start_y, unit_cards, cards_library)
+
+        if not unit then
+            return false, string.format("Erreur création unité: %s", unit_name)
+        end
+
+        team[unit_name] = unit
+    end
+
+    return team, nil
+end
+
+-- ============================================
+-- CALCUL DU KARMA D'UNE ÉQUIPE
+-- ============================================
+function M.calculate_team_karma(team_units)
+    local all_card_ids = {}
+
+    for _, unit in pairs(team_units) do
+        for _, card_data in pairs(unit.cards) do
+            if card_data and card_data.id then
+                table.insert(all_card_ids, card_data.id)
+            end
+        end
+    end
+
+    return karma.calculate_karma(all_card_ids)
+end
+
+-- ============================================
+-- EXTRACTION DE L'ÉTAT DES UNITÉS
+-- ============================================
+function M.get_units_state(units, players)
+    local board = {
+        units = {}
+    }
+
+    for player_num = 1, 2 do
+        local player_id = players[player_num].id
+
+        if player_id and units[player_num] then
+            board.units[player_id] = {}
+
+            for unit_name, unit in pairs(units[player_num]) do
+                board.units[player_id][unit_name] = {
+                    x = unit.x,
+                    y = unit.y,
+                    chess_position = unit.chess_position,
+                    alive = unit.alive,
+                    stats = unit.stats,
+                    cards = {}
+                }
+
+                for card_type, card_data in pairs(unit.cards) do
+                    board.units[player_id][unit_name].cards[card_type] =
+                        card_data and card_data.id or nil
+                end
+            end
+        end
+    end
+
+    return board
 end
 
 return M

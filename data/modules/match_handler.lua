@@ -1,8 +1,10 @@
 -- match_handler.lua
 local nk = require("nakama")
 local game_logic = require("game_logic")
+local game_board = require("game_logic.board")
+local game_units = require("game_logic.units")
 local match_players = require("match.players")
---local match_turn = require("match.turn") -- À créer plus tard
+local match_turn = require("match.turn")
 local M = {}
 
 local ADMIN_USER_ID = "319f9d0f-06fc-4805-a900-be0d22a09b21"
@@ -14,11 +16,11 @@ function M.match_init(context, params)
     local state = {
         players = {},
         current_player = 1,
-        turn = 1,
+        turn = 0,
         game_started = false,
         game_data = game_logic.init_game_state()
     }
-    
+
     return state, 1, "Kingfield Match"
 end
 
@@ -66,7 +68,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
             -- Vérifier si les deux équipes sont chargées
             if game_logic.are_teams_ready(state) then
                 -- Créer la grille avec les karmas des équipes
-                state.game_data.board = game_logic.create_board(state)
+                state.game_data.board = game_board.create_board(state)
 
                 -- Démarrer le jeu
                 state.game_started = true
@@ -79,8 +81,8 @@ function M.match_join(context, dispatcher, tick, state, presences)
                     units_state = game_logic.get_units_state(state),
                     board_state = game_logic.get_board_state(state),  -- Ajout de l'état du board
                     karma_value = {
-                        [1] = game_logic.calculate_team_karma(state.game_data.units[1]),
-                        [2] = game_logic.calculate_team_karma(state.game_data.units[2])
+                        [1] = game_units.calculate_team_karma(state.game_data.units[1]),
+                        [2] = game_units.calculate_team_karma(state.game_data.units[2])
                     }
                 }
 
@@ -115,14 +117,22 @@ end
 function M.match_loop(context, dispatcher, tick, state, messages)
     for _, message in ipairs(messages) do
         local decoded = nk.json_decode(message.data)
+        
         if decoded.type == "action" then
+            print("[MATCH] Action reçue pour le tour", decoded.turn)
             local success, result = match_turn.process_action(state, message.sender, decoded)
-            if success then
-                dispatcher.broadcast_message(1, nk.json_encode({
-                    type = "action_result",
-                    result = result
-                }))
+           
+             if success then
+                -- Envoie le résultat à tous les joueurs
+                dispatcher.broadcast_message(1, nk.json_encode(result))
+            else
+                -- Envoie l'erreur uniquement au joueur concerné
+                dispatcher.broadcast_message_to(
+                    { message.sender.session_id },
+                    nk.json_encode(result)
+                )
             end
+
         end
     end
     return state
