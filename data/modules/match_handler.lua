@@ -16,7 +16,7 @@ function M.match_init(context, params)
     local state = {
         players = {},
         current_player = 1,
-        turn = 0,
+        turn = 1,
         game_started = false,
         game_data = game_logic.init_game_state()
     }
@@ -121,16 +121,12 @@ function M.match_loop(context, dispatcher, tick, state, messages)
         if decoded.type == "action" then
             print("[MATCH] Action reçue pour le tour", decoded.turn)
             local success, result = match_turn.process_action(state, message.sender, decoded)
-           
+
              if success then
                 -- Envoie le résultat à tous les joueurs
                 dispatcher.broadcast_message(1, nk.json_encode(result))
             else
-                -- Envoie l'erreur uniquement au joueur concerné
-                dispatcher.broadcast_message_to(
-                    { message.sender.session_id },
-                    nk.json_encode(result)
-                )
+                dispatcher.broadcast_message(1, nk.json_encode(result), { message.sender })
             end
 
         end

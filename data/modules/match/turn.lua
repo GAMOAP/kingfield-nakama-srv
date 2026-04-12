@@ -1,5 +1,6 @@
 -- modules/match/turn.lua
 local nk = require("nakama")
+local game_units = require("game_logic.units")
 
 local M = {}
 
@@ -21,19 +22,76 @@ function M.process_action(state, sender, action_data)
     end
 
     if not player_index or player_index ~= state.current_player then
-        return false, { error = "Not your turn" }
+        return false, {
+            type = "error",
+            message = "Ce n'est pas votre tour",
+            current_player = state.players[state.current_player].id
+        }
     end
 
-    -- 2. Change de joueur pour le prochain tour
-    state.current_player = (state.current_player % 2) + 1
-    state.turn = state.turn + 1
+    -- 2. Vérifie que le numéro de tour correspond
+    if action_data.turn ~= state.turn then
+        return false, {
+            type = "error",
+            message = "Numéro de tour invalide",
+            expected_turn = state.turn,
+            received_turn = action_data.turn
+        }
+    end
 
-    -- 3. Renvoie simplement l'action reçue (sans vérification)
+    print("[TURN] #state = ", #state)
+    for state_key, state_value in pairs(state) do
+        print("[TURN] state_key =",state_key,"state_value =",state_value )
+    end
+
+    -- 3. Traite chaque action dans le tableau
+    local all_actions_valid = true  -- Variable pour vérifier si toutes les actions sont valides
+    local error_message = nil
+
+    for _, action in ipairs(action_data.actions) do
+
+        -- 3.1. Vérifie que l'unité existe
+        local unit = state.game_data.units[player_index][action.unit_name]
+        if not unit then
+            error_message = "Unité introuvable"
+            all_actions_valid = false
+            goto continue  -- Passe à l'action suivante
+        end
+
+        -- 3.2. Vérifie que l'unité possède la carte
+        local has_card = false
+        for _, card_data in pairs(unit.cards) do
+            if card_data["id"] == action.card_id then
+                has_card = true
+            end
+        end
+
+        if not has_card then
+            error_message = "L'unité ne possède pas cette carte"
+            all_actions_valid = false
+            goto continue
+        end
+
+        ::continue::
+    end
+
+    -- 4. Change de joueur pour le prochain tour SEULEMENT si toutes les actions sont valides
+    if all_actions_valid then
+        state.current_player = (state.current_player % 2) + 1
+        state.turn = state.turn + 1
+    else
+        return false, {
+            type = "turn_error",
+            message = error_message,
+        }
+    end
+
+    -- 5. Retourne les résultats
     return true, {
-        type = "action_processed",
-        action = action_data,
+        type = "turn_processed",
+        turn = state.turn,
         next_player = state.players[state.current_player].id,
-        turn = state.turn
+        actions = action_data.actions
     }
 end
 
