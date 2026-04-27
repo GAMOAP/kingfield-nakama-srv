@@ -1,4 +1,5 @@
 -- modules/game_logic/units.lua
+local nk = require("nakama")
 local karma = require("game_logic.karma")
 local cards = require("game_logic.cards")
 local helpers = require("utils.helpers")
@@ -10,6 +11,59 @@ local M = {}
 -- ============================================
 local CARD_TYPE = {"0", "1", "2", "3", "4", "5", "6", "7", "8"}
 local TEAM = {"side_left", "center_left", "king", "center_right", "side_right"}
+
+-- ============================================
+-- CHARGEMENT D'UNE ÉQUIPE
+-- ============================================
+function M.load_team(state, player_index, user_id, admin_user_id)
+    if state.game_data.teams_loaded[player_index] then
+        print("[GAME_LOGIC] ⚠️ Équipe déjà chargée")
+        return false, "Équipe déjà chargée"
+    end
+
+    if not state.game_data.cards_library then
+        local cards_lib, err = cards.load_cards_library(admin_user_id)
+        if err then return false, err end
+        state.game_data.cards_library = cards_lib
+    end
+
+    local user_team = nk.storage_read({
+        {collection = "player_data", key = "team", user_id = user_id}
+    })
+
+    if not user_team or #user_team == 0 then
+        return false, "Équipe non trouvée dans le storage"
+    end
+
+    local user_team_data = user_team[1].value
+    if not user_team_data or not user_team_data.data then
+        return false, "Format d'équipe invalide"
+    end
+
+    local team, err = M.create_units_from_team_data(
+        user_team_data.data,
+        state.game_data.cards_library,
+        player_index
+    )
+
+    if not team then return false, err end
+
+    -- Placer les unités sur le plateau
+    if state.game_data.board then
+        for unit_name, unit in pairs(team) do
+            state.game_data.board[unit.x][unit.y].data.is_occupied = true
+            state.game_data.board[unit.x][unit.y].data.occupant = {
+                unit_id = unit_name,
+                player = player_index
+            }
+        end
+    end
+
+    state.game_data.units[player_index] = team
+    state.game_data.teams_loaded[player_index] = true
+
+    return true, nil
+end
 
 -- ============================================
 -- CRÉER UNE UNITÉ

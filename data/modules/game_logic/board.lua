@@ -64,4 +64,37 @@ function M.get_all_card_ids(team_units)
     return card_ids
 end
 
+-- ============================================
+-- ÉTAT DE LA GRILLE
+-- ============================================
+function M.get_board_state(state)
+    if not state.game_data.board then return nil end
+
+    local board_state = {}
+    local GRID_SIZE = 5
+
+    for x = 1, GRID_SIZE do
+        board_state[x] = {}
+        for y = 1, GRID_SIZE do
+            local cell = state.game_data.board[x][y]
+            board_state[x][y] = {
+                position = cell.position,
+                chess_position = cell.chess_position,
+                quarters = cell.data.quarters,
+                is_occupied = cell.data.is_occupied,
+            }
+
+            if cell.data.is_occupied and cell.data.occupant then
+                board_state[x][y].occupant = {
+                    unit_id = cell.data.occupant.unit_id,
+                    player = cell.data.occupant.player,
+                }
+            end
+        end
+    end
+
+    return board_state
+end
+
+
 return M

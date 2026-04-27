@@ -1,6 +1,7 @@
 -- modules/match/turn.lua
 local nk = require("nakama")
 local game_units = require("game_logic.units")
+local match_actions = require("match.actions")
 
 local M = {}
 
@@ -39,13 +40,8 @@ function M.process_action(state, sender, action_data)
         }
     end
 
-    print("[TURN] #state = ", #state)
-    for state_key, state_value in pairs(state) do
-        print("[TURN] state_key =",state_key,"state_value =",state_value )
-    end
-
-    -- 3. Traite chaque action dans le tableau
-    local all_actions_valid = true  -- Variable pour vérifier si toutes les actions sont valides
+    -- 3. Valide toutes les actions
+    local all_actions_valid = true
     local error_message = nil
 
     for _, action in ipairs(action_data.actions) do
@@ -75,10 +71,32 @@ function M.process_action(state, sender, action_data)
         ::continue::
     end
 
-    -- 4. Change de joueur pour le prochain tour SEULEMENT si toutes les actions sont valides
+    -- SEULEMENT si toutes les actions sont valides
     if all_actions_valid then
+
+        -- 4. Applique les actions si elles sont valides
+        local execution_results = {}
+        for _, action in ipairs(action_data.actions) do
+            local success, err = match_actions.apply_action(state, player_index, action)
+            if not success then
+                return false, {
+                    type = "turn_error",
+                    message = err
+                }
+            end
+        end
+
+        -- 5. Change de tour
         state.current_player = (state.current_player % 2) + 1
         state.turn = state.turn + 1
+
+         -- 5. Retourne les résultats
+        return true, {
+            type = "turn_processed",
+            turn = state.turn,
+            next_player = state.players[state.current_player].id,
+            actions = action_data.actions
+        }
     else
         return false, {
             type = "turn_error",
@@ -86,13 +104,7 @@ function M.process_action(state, sender, action_data)
         }
     end
 
-    -- 5. Retourne les résultats
-    return true, {
-        type = "turn_processed",
-        turn = state.turn,
-        next_player = state.players[state.current_player].id,
-        actions = action_data.actions
-    }
+   
 end
 
 return M
